@@ -12,9 +12,39 @@ const LEVELS = [
 
 const COMPONENTS = ['server', 'agent', 'client'] as const;
 
+// Dummy tag data
+const dummyTags: Record<string, string[]> = {
+  main: ['v1.0.0', 'v1.0.1', 'v2.0.0', 'v2.0.1'],
+  dev: ['v0.1.0', 'v0.2.0'],
+};
+
+function getMostStableTag(tags: string[]): string | null {
+  if (!tags.length) return null;
+
+  const parsed = tags.map(tag => {
+    const [_, major, minor, patch] = tag.match(/v(\d+)\.(\d+)\.(\d+)/) || [];
+    return {
+      original: tag,
+      major: parseInt(major),
+      minor: parseInt(minor),
+      patch: parseInt(patch),
+    };
+  });
+
+  const sorted = parsed
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a.major !== b.major) return b.major - a.major;
+      if (a.minor !== b.minor) return a.minor - b.minor;
+      return a.patch - b.patch; // lower patch preferred
+    });
+
+  return sorted[0]?.original || null;
+}
+
 export function NewStory() {
   const navigate = useNavigate();
-  const { addStory } = useStories();
+  const { stories, addStory } = useStories();
   const [topic, setTopic] = useState('');
   const [selections, setSelections] = useState<Selection[]>([]);
 
@@ -38,9 +68,44 @@ export function NewStory() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!topic || selections.length === 0) return;
 
-    addStory({ topic, selections });
+    if (!/^[^_]+_[^_]+$/.test(topic)) {
+      alert("Format must be: newbranch_basebranch");
+      return;
+    }
+
+    const [newBranch, baseBranch] = topic.split('_');
+    if (!newBranch || !baseBranch || selections.length === 0) return;
+
+    if (!dummyTags[baseBranch]) {
+      alert(`Base branch "${baseBranch}" not found.`);
+      return;
+    }
+
+    const tags = dummyTags[baseBranch];
+    const stableTag = getMostStableTag(tags);
+    if (!stableTag) {
+      alert('Unable to determine the most stable tag.');
+      return;
+    }
+
+    // Handle duplicate new branch names
+    let uniqueBranch = newBranch;
+    let counter = 1;
+    const baseBranches = stories.map((s) => s.topic.split('_')[0]);
+    while (baseBranches.includes(uniqueBranch)) {
+      uniqueBranch = `${newBranch}_${counter++}`;
+    }
+
+    const finalBranch = `${uniqueBranch}_${stableTag}`;
+    const finalTopic = `${uniqueBranch}_${baseBranch}`;
+
+    console.log(`🚀 Creating branch: ${finalBranch} from base branch: ${baseBranch} with tag: ${stableTag}`);
+
+    addStory({
+      topic: finalTopic, selections,
+    });
+
     navigate('/');
   };
 
@@ -49,22 +114,38 @@ export function NewStory() {
       <Header />
       <main className="container mx-auto px-4 py-8">
         <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-10 bg-white p-6 rounded-lg shadow-md">
-          {/* Topic Input */}
-          
-            <div>
-              <label htmlFor="topic" className="block text-xl font-semibold text-gray-800 mb-3">
-                📝 Enter issue Name
-              </label>
-              <input
-                type="text"
-                id="topic"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                className="w-full px-4 py-2 text-base rounded-lg border border-gray-300 bg-white shadow focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-500 transition duration-150 ease-in-out placeholder-gray-500 hover:border-blue-400"
-                placeholder="Enter the issue to fix"
-                required
-              />
-            </div>
+          <div>
+            <label htmlFor="topic" className="block text-xl font-semibold text-gray-800 mb-3">
+              📝 Enter Issue Name (format: newbranch_basebranch)
+            </label>
+            <input
+              type="text"
+              id="topic"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className={`w-full px-4 py-2 text-base rounded-lg border ${
+                /^[^_]+_[^_]+$/.test(topic) ? 'border-gray-300' : 'border-red-500'
+              } bg-white shadow focus:outline-none focus:ring-2 ${
+                /^[^_]+_[^_]+$/.test(topic) ? 'focus:ring-blue-400 focus:border-blue-500' : 'focus:ring-red-400 focus:border-red-500'
+              } transition duration-150 ease-in-out placeholder-gray-500`}
+              placeholder="Example: loginfeature_main"
+              required
+            />
+            {topic && (
+              <>
+                {!/^[^_]+_[^_]+$/.test(topic) ? (
+                  <p className="text-sm text-red-600 mt-2">
+                    ❌ Format must be like: <code>newbranch_basebranch</code>
+                  </p>
+                ) : (
+                  <div className="mt-2 text-sm text-green-700">
+                    ✅ <strong>New Branch:</strong> {topic.split('_')[0]}<br />
+                    ✅ <strong>Base Branch:</strong> {topic.split('_')[1]}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Component Table */}
           <div className="space-y-8">
