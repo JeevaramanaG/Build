@@ -1,9 +1,8 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { StoryProvider } from './context/StoryContext';
-import { Dashboard } from './pages/Dashboard';
 import { NewStory } from './pages/NewStory';
 import { StoryView } from './pages/StoryView';
-
+import {Dashboard} from './pages/Dashboard';
 function App() {
   return (
     <StoryProvider>

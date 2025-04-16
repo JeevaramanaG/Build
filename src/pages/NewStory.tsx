@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { useStories } from '../context/StoryContext';
-import { Selection } from '../types';
+import type { Selection } from '../types';
 
 const LEVELS = [
   { level: 1, features: 1 },
@@ -12,7 +12,6 @@ const LEVELS = [
 
 const COMPONENTS = ['server', 'agent', 'client'] as const;
 
-// Dummy tag data
 const dummyTags: Record<string, string[]> = {
   main: ['v1.0.0', 'v1.0.1', 'v2.0.0', 'v2.0.1'],
   dev: ['v0.1.0', 'v0.2.0'],
@@ -44,7 +43,7 @@ function getMostStableTag(tags: string[]): string | null {
 
 export function NewStory() {
   const navigate = useNavigate();
-  const { stories, addStory } = useStories();
+  const { stories, addStory } = useStories(); // FIX: addStory used
   const [topic, setTopic] = useState('');
   const [selections, setSelections] = useState<Selection[]>([]);
 
@@ -54,9 +53,9 @@ export function NewStory() {
     );
 
     if (existingIndex >= 0) {
-      setSelections(selections.filter((_, i) => i !== existingIndex));
+      setSelections([]);
     } else {
-      setSelections([...selections, { level, feature, component }]);
+      setSelections([{ level, feature, component }]); // ✅ Only one at a time
     }
   };
 
@@ -65,6 +64,9 @@ export function NewStory() {
       (s) => s.level === level && s.feature === feature && s.component === component
     );
   };
+
+  const isAnySelected = selections.length > 0;
+  const disableAllOthers = isAnySelected;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,22 +91,25 @@ export function NewStory() {
       return;
     }
 
-    // Handle duplicate new branch names
+    // Ensure unique branch name
     let uniqueBranch = newBranch;
     let counter = 1;
-    const baseBranches = stories.map((s) => s.topic.split('_')[0]);
-    while (baseBranches.includes(uniqueBranch)) {
+    const existingBranches = stories.map((s) => s.topic.split('_')[0]);
+    while (existingBranches.includes(uniqueBranch)) {
       uniqueBranch = `${newBranch}_${counter++}`;
     }
 
     const finalBranch = `${uniqueBranch}_${stableTag}`;
-    const finalTopic = `${uniqueBranch}_${baseBranch}`;
 
     console.log(`🚀 Creating branch: ${finalBranch} from base branch: ${baseBranch} with tag: ${stableTag}`);
 
+    const selectedLevel = selections[0]?.level ?? 0;
     addStory({
-      topic: finalTopic, selections,
-      issueName: ''
+      topic: finalBranch,
+      selections,
+      level: selectedLevel,
+      issueName: '',
+      name: ''
     });
 
     navigate('/');
@@ -148,13 +153,11 @@ export function NewStory() {
             )}
           </div>
 
-          {/* Component Table */}
+          {/* Selection Table */}
           <div className="space-y-8">
             {LEVELS.map(({ level, features }) => (
               <div key={level} className="space-y-4">
                 <h3 className="text-xl font-semibold text-blue-700">Level {level}</h3>
-
-                {/* Header Row */}
                 <div className="grid grid-cols-4 gap-4 font-medium text-gray-600 border-b pb-2">
                   <div>Component</div>
                   {COMPONENTS.map((component) => (
@@ -162,23 +165,26 @@ export function NewStory() {
                   ))}
                 </div>
 
-                {/* Features Grid */}
                 <div className="space-y-2">
                   {Array.from({ length: features }, (_, i) => (
                     <div key={i} className="grid grid-cols-4 gap-4 items-center border-b py-2">
                       <div className="text-gray-700 text-sm font-medium">
                         Feature {i + 1}
                       </div>
-                      {COMPONENTS.map((component) => (
-                        <div key={component} className="flex justify-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected(level, i + 1, component)}
-                            onChange={() => toggleSelection(level, i + 1, component)}
-                            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                          />
-                        </div>
-                      ))}
+                      {COMPONENTS.map((component) => {
+                        const selected = isSelected(level, i + 1, component);
+                        return (
+                          <div key={component} className="flex justify-center">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              disabled={!selected && disableAllOthers}
+                              onChange={() => toggleSelection(level, i + 1, component)}
+                              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
@@ -186,11 +192,11 @@ export function NewStory() {
             ))}
           </div>
 
-          {/* Submit Button */}
+          {/* Submit */}
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={!topic || selections.length === 0}
+              disabled={!topic || selections.length !== 1}
               className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               Create Story

@@ -12,11 +12,13 @@ export interface Selection {
 }
 
 export interface Story {
+  name: string;
+  level: number;
   id: string;
   topic: string;
   issueName: string;
-  createdAt: Date;
   selections: Selection[];
+  createdAt: string;
   branchStatus: BranchStatus[];
 }
 
