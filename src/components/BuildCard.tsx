@@ -9,7 +9,8 @@ interface BuildCardProps {
   baseBranch: string;
   branchName: string;
   disabled?: boolean;
-  onBuild: () => void;
+  onBuild: (buildItem: any) => void;
+  isInQueue: boolean;
 }
 
 export function BuildCard({
@@ -21,10 +22,26 @@ export function BuildCard({
   branchName,
   disabled = false,
   onBuild,
+  isInQueue,
 }: BuildCardProps) {
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
   };
+
+  const handleBuild = () => {
+    const buildItem = {
+      level,
+      feature,
+      component,
+      tag,
+      baseBranch,
+      branchName,
+      status: "Queued",
+    };
+    onBuild(buildItem);
+  };
+
+  const isDisabled = disabled || isInQueue;
 
   return (
     <div className="bg-white p-4 rounded-lg shadow space-y-4 opacity-100">
@@ -48,7 +65,6 @@ export function BuildCard({
       </div>
 
       <div className="flex gap-2 pt-2">
-        {/* Rebase and Merge buttons can be expanded in the future */}
         <button className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded hover:bg-yellow-200">
           Rebase
         </button>
@@ -57,12 +73,12 @@ export function BuildCard({
         </button>
         <button
           className={`px-3 py-1 rounded ${
-            disabled
+            isDisabled
               ? "bg-gray-200 text-gray-400 cursor-not-allowed"
               : "bg-blue-100 text-blue-800 hover:bg-blue-200"
           }`}
-          onClick={onBuild}
-          disabled={disabled}
+          onClick={handleBuild}
+          disabled={isDisabled}
         >
           Build
         </button>

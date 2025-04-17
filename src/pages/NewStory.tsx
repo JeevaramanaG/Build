@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { useStories } from '../context/StoryContext';
@@ -41,11 +41,45 @@ function getMostStableTag(tags: string[]): string | null {
   return sorted[0]?.original || null;
 }
 
+function generateBranchInfo(issueName: string) {
+  const kebab = (text: string) =>
+    text.toLowerCase().replace(/[^\w\s]/g, '').trim().replace(/\s+/g, '-');
+
+  const lower = issueName.toLowerCase();
+  let prefix = 'feature';
+  let baseBranch = 'develop';
+
+  if (lower.startsWith('bug') || lower.startsWith('bugfix')) {
+    prefix = 'bug';
+    baseBranch = 'main';
+  } else if (lower.startsWith('enhancement')) {
+    prefix = 'enhancement';
+    baseBranch = 'develop';
+  } else if (lower.startsWith('hotfix')) {
+    prefix = 'hotfix';
+    baseBranch = 'main';
+  }
+
+  const name = kebab(issueName.replace(/^(bugfix|bug|hotfix|enhancement)/i, '').trim());
+  const newBranch = `${prefix}/${name || 'new-issue'}`;
+
+  return { baseBranch, newBranch };
+}
+
 export function NewStory() {
   const navigate = useNavigate();
-  const { stories, addStory } = useStories(); // FIX: addStory used
+  const { stories, addStory } = useStories();
   const [topic, setTopic] = useState('');
   const [selections, setSelections] = useState<Selection[]>([]);
+  const [autoBranch, setAutoBranch] = useState<{ newBranch: string; baseBranch: string } | null>(null);
+
+  useEffect(() => {
+    if (topic.trim()) {
+      setAutoBranch(generateBranchInfo(topic.trim()));
+    } else {
+      setAutoBranch(null);
+    }
+  }, [topic]);
 
   const toggleSelection = (level: number, feature: number, component: Selection['component']) => {
     const existingIndex = selections.findIndex(
@@ -55,7 +89,10 @@ export function NewStory() {
     if (existingIndex >= 0) {
       setSelections([]);
     } else {
-      setSelections([{ level, feature, component }]); // ✅ Only one at a time
+      setSelections([{
+        level, feature, component,
+        tag: undefined
+      }]);
     }
   };
 
@@ -71,12 +108,12 @@ export function NewStory() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!/^[^_]+_[^_]+$/.test(topic)) {
-      alert("Format must be: newbranch_basebranch");
+    if (!autoBranch) {
+      alert("Please enter a valid issue name");
       return;
     }
 
-    const [newBranch, baseBranch] = topic.split('_');
+    const { newBranch, baseBranch } = autoBranch;
     if (!newBranch || !baseBranch || selections.length === 0) return;
 
     if (!dummyTags[baseBranch]) {
@@ -91,7 +128,6 @@ export function NewStory() {
       return;
     }
 
-    // Ensure unique branch name
     let uniqueBranch = newBranch;
     let counter = 1;
     const existingBranches = stories.map((s) => s.topic.split('_')[0]);
@@ -108,7 +144,7 @@ export function NewStory() {
       topic: finalBranch,
       selections,
       level: selectedLevel,
-      issueName: '',
+      issueName: topic,
       name: ''
     });
 
@@ -122,38 +158,25 @@ export function NewStory() {
         <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-10 bg-white p-6 rounded-lg shadow-md">
           <div>
             <label htmlFor="topic" className="block text-xl font-semibold text-gray-800 mb-3">
-              📝 Enter Issue Name (format: newbranch_basebranch)
+              📝 Enter Issue Name (e.g., bug login error, enhancement improve UI)
             </label>
             <input
               type="text"
               id="topic"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              className={`w-full px-4 py-2 text-base rounded-lg border ${
-                /^[^_]+_[^_]+$/.test(topic) ? 'border-gray-300' : 'border-red-500'
-              } bg-white shadow focus:outline-none focus:ring-2 ${
-                /^[^_]+_[^_]+$/.test(topic) ? 'focus:ring-blue-400 focus:border-blue-500' : 'focus:ring-red-400 focus:border-red-500'
-              } transition duration-150 ease-in-out placeholder-gray-500`}
-              placeholder="Example: loginfeature_main"
+              className={`w-full px-4 py-2 text-base rounded-lg border ${topic ? 'border-gray-300' : 'border-red-500'} bg-white shadow focus:outline-none focus:ring-2 ${topic ? 'focus:ring-blue-400 focus:border-blue-500' : 'focus:ring-red-400 focus:border-red-500'} transition duration-150 ease-in-out placeholder-gray-500`}
+              placeholder="Example: bug login error"
               required
             />
-            {topic && (
-              <>
-                {!/^[^_]+_[^_]+$/.test(topic) ? (
-                  <p className="text-sm text-red-600 mt-2">
-                    ❌ Format must be like: <code>newbranch_basebranch</code>
-                  </p>
-                ) : (
-                  <div className="mt-2 text-sm text-green-700">
-                    ✅ <strong>New Branch:</strong> {topic.split('_')[0]}<br />
-                    ✅ <strong>Base Branch:</strong> {topic.split('_')[1]}
-                  </div>
-                )}
-              </>
+            {autoBranch && (
+              <div className="mt-2 text-sm text-green-700">
+                ✅ <strong>New Branch:</strong> {autoBranch.newBranch}<br />
+                ✅ <strong>Base Branch:</strong> {autoBranch.baseBranch}
+              </div>
             )}
           </div>
 
-          {/* Selection Table */}
           <div className="space-y-8">
             {LEVELS.map(({ level, features }) => (
               <div key={level} className="space-y-4">
@@ -192,7 +215,6 @@ export function NewStory() {
             ))}
           </div>
 
-          {/* Submit */}
           <div className="flex justify-end">
             <button
               type="submit"
