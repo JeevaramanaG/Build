@@ -12,31 +12,34 @@ const LEVELS = [
 
 const COMPONENTS = ['server', 'agent', 'client'] as const;
 
-const dummyTags: Record<string, string[]> = {
-  main: ['v1.0.0', 'v1.0.1', 'v2.0.0', 'v2.0.1'],
-  dev: ['v0.1.0', 'v0.2.0'],
+const dummyTags: Record<string, Record<string, string[]>> = {
+  main: {
+    server: ['v1.0.0', 'v2.0.0', 'v2.0.1'],
+    agent: ['v1.1.0', 'v1.2.0', 'v2.0.0'],
+    client: ['v1.0.0', 'v1.0.1', 'v2.0.0'],
+  }
 };
 
 function getMostStableTag(tags: string[]): string | null {
   if (!tags.length) return null;
 
   const parsed = tags.map(tag => {
-    const [_, major, minor, patch] = tag.match(/v(\d+)\.(\d+)\.(\d+)/) || [];
+    const match = tag.match(/v(\d+)\.(\d+)\.(\d+)/);
+    if (!match) return null;
+    const [, major, minor, patch] = match;
     return {
       original: tag,
       major: parseInt(major),
       minor: parseInt(minor),
       patch: parseInt(patch),
     };
-  });
+  }).filter(Boolean) as { original: string, major: number, minor: number, patch: number }[];
 
-  const sorted = parsed
-    .filter(Boolean)
-    .sort((a, b) => {
-      if (a.major !== b.major) return b.major - a.major;
-      if (a.minor !== b.minor) return a.minor - b.minor;
-      return a.patch - b.patch; // lower patch preferred
-    });
+  const sorted = parsed.sort((a, b) => {
+    if (a.major !== b.major) return b.major - a.major;
+    if (a.minor !== b.minor) return b.minor - a.minor;
+    return b.patch - a.patch;
+  });
 
   return sorted[0]?.original || null;
 }
@@ -45,23 +48,8 @@ function generateBranchInfo(issueName: string) {
   const kebab = (text: string) =>
     text.toLowerCase().replace(/[^\w\s]/g, '').trim().replace(/\s+/g, '-');
 
-  const lower = issueName.toLowerCase();
-  let prefix = 'feature';
-  let baseBranch = 'develop';
-
-  if (lower.startsWith('bug') || lower.startsWith('bugfix')) {
-    prefix = 'bug';
-    baseBranch = 'main';
-  } else if (lower.startsWith('enhancement')) {
-    prefix = 'enhancement';
-    baseBranch = 'develop';
-  } else if (lower.startsWith('hotfix')) {
-    prefix = 'hotfix';
-    baseBranch = 'main';
-  }
-
-  const name = kebab(issueName.replace(/^(bugfix|bug|hotfix|enhancement)/i, '').trim());
-  const newBranch = `${prefix}/${name || 'new-issue'}`;
+  const baseBranch = 'main';
+  const newBranch = `feature/${kebab(issueName || 'new-issue')}`;
 
   return { baseBranch, newBranch };
 }
@@ -87,9 +75,9 @@ export function NewStory() {
     );
 
     if (existingIndex >= 0) {
-      setSelections([]);
+      setSelections(prev => prev.filter((_, i) => i !== existingIndex));
     } else {
-      setSelections([{
+      setSelections(prev => [...prev, {
         level, feature, component,
         tag: undefined
       }]);
@@ -102,9 +90,6 @@ export function NewStory() {
     );
   };
 
-  const isAnySelected = selections.length > 0;
-  const disableAllOthers = isAnySelected;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -114,39 +99,41 @@ export function NewStory() {
     }
 
     const { newBranch, baseBranch } = autoBranch;
-    if (!newBranch || !baseBranch || selections.length === 0) return;
+    if (!newBranch || selections.length === 0) return;
 
-    if (!dummyTags[baseBranch]) {
-      alert(`Base branch "${baseBranch}" not found.`);
-      return;
-    }
-
-    const tags = dummyTags[baseBranch];
-    const stableTag = getMostStableTag(tags);
-    if (!stableTag) {
-      alert('Unable to determine the most stable tag.');
-      return;
-    }
-
+    const existingBranches = stories.map((s) => s.topic.split('_')[0]);
     let uniqueBranch = newBranch;
     let counter = 1;
-    const existingBranches = stories.map((s) => s.topic.split('_')[0]);
     while (existingBranches.includes(uniqueBranch)) {
       uniqueBranch = `${newBranch}_${counter++}`;
     }
 
-    const finalBranch = `${uniqueBranch}_${stableTag}`;
+    const createdAt = new Date().toISOString();
 
-    console.log(`🚀 Creating branch: ${finalBranch} from base branch: ${baseBranch} with tag: ${stableTag}`);
+    for (const selection of selections) {
+      const tags = dummyTags[baseBranch]?.[selection.component] || [];
+      const stableTag = getMostStableTag(tags);
 
-    const selectedLevel = selections[0]?.level ?? 0;
-    addStory({
-      topic: finalBranch,
-      selections,
-      level: selectedLevel,
-      issueName: topic,
-      name: ''
-    });
+      if (!stableTag) {
+        alert(`Unable to determine stable tag for ${selection.component}`);
+        continue;
+      }
+
+      const finalBranch = `${uniqueBranch}_${selection.component}_${stableTag}`;
+
+      addStory({
+        topic: finalBranch,
+        selections: [selection],
+        level: selection.level,
+        issueName: topic,
+        name: '',
+        status: 'Pending',
+        component: selection.component,
+        branch: finalBranch,
+        tag: stableTag,
+        userId: "user123",
+      });
+    }
 
     navigate('/');
   };
@@ -158,7 +145,7 @@ export function NewStory() {
         <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-10 bg-white p-6 rounded-lg shadow-md">
           <div>
             <label htmlFor="topic" className="block text-xl font-semibold text-gray-800 mb-3">
-              📝 Enter Issue Name (e.g., bug login error, enhancement improve UI)
+              📝 Enter Issue Name (any text is fine!)
             </label>
             <input
               type="text"
@@ -166,15 +153,9 @@ export function NewStory() {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               className={`w-full px-4 py-2 text-base rounded-lg border ${topic ? 'border-gray-300' : 'border-red-500'} bg-white shadow focus:outline-none focus:ring-2 ${topic ? 'focus:ring-blue-400 focus:border-blue-500' : 'focus:ring-red-400 focus:border-red-500'} transition duration-150 ease-in-out placeholder-gray-500`}
-              placeholder="Example: bug login error"
+              placeholder="Example: login issue on dashboard"
               required
             />
-            {autoBranch && (
-              <div className="mt-2 text-sm text-green-700">
-                ✅ <strong>New Branch:</strong> {autoBranch.newBranch}<br />
-                ✅ <strong>Base Branch:</strong> {autoBranch.baseBranch}
-              </div>
-            )}
           </div>
 
           <div className="space-y-8">
@@ -201,7 +182,6 @@ export function NewStory() {
                             <input
                               type="checkbox"
                               checked={selected}
-                              disabled={!selected && disableAllOthers}
                               onChange={() => toggleSelection(level, i + 1, component)}
                               className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                             />
@@ -218,7 +198,7 @@ export function NewStory() {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={!topic || selections.length !== 1}
+              disabled={!topic || selections.length === 0}
               className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               Create Story

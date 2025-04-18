@@ -2,20 +2,17 @@ import { Header } from '../components/Header';
 import { useStories } from '../context/StoryContext';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 export function Dashboard() {
   const { stories } = useStories();
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  // Group stories by level
-  const groupedByLevel: Record<number, typeof stories> = {};
-  for (const story of stories) {
-    if (!groupedByLevel[story.level]) groupedByLevel[story.level] = [];
-    groupedByLevel[story.level].push(story);
-  }
-  
+  const { currentUser, isTeamSpace } = useAuth();
+
   const filteredStories = stories.filter((story) => {
+    if (!isTeamSpace && story.name !== currentUser?.name) return false;
     if (searchText && !story.topic.toLowerCase().includes(searchText.toLowerCase())) return false;
     if (statusFilter !== 'All' && story.status !== statusFilter) return false;
     return true;
@@ -39,7 +36,7 @@ export function Dashboard() {
           <input
             type="text"
             className="border px-3 py-2 rounded shadow-sm"
-            placeholder="Search component..."
+            placeholder="Search issue..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
@@ -82,9 +79,6 @@ export function Dashboard() {
                       >
                         <span className="text-gray-800 font-medium">
                           {story.topic}
-                        </span>
-                        <span className="ml-2 text-sm text-gray-500">
-                          {new Date(story.createdAt).toLocaleDateString()}
                         </span>
                       </Link>
                     </li>

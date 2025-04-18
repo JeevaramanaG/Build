@@ -1,4 +1,3 @@
-// src/components/BuildCard.tsx
 import { Copy } from "lucide-react";
 
 interface BuildCardProps {
@@ -36,7 +35,6 @@ export function BuildCard({
       tag,
       baseBranch,
       branchName,
-      status: "Queued",
     };
     onBuild(buildItem);
   };
@@ -60,7 +58,6 @@ export function BuildCard({
 
       <div className="space-y-1 text-sm bg-gray-50 p-3 rounded text-gray-800">
         <div>🔖 <strong>Stable Tag:</strong> {tag}</div>
-        <div>🌿 <strong>Base Branch:</strong> {baseBranch}</div>
         <div>🔗 <strong>Branch Name:</strong> {branchName}</div>
       </div>
 
